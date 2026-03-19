@@ -1,67 +1,133 @@
+#include <string>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
+#include <eigen3/Eigen/Dense>
+#include <chrono>
 #include <cmath>
 
-// Define which mirage to simulate
-enum MirageType { INFERIOR, SUPERIOR };
-MirageType current_mode = INFERIOR; 
 
-double get_m(double y) {
-    double m0 = 1.00027; // Standard air index
-    double alpha = 0.0001; 
-    // Inferior: Index increases with height (m = m0 + alpha * y)
-    // Superior: Index decreases with height (m = m0 - alpha * y)
-    return (current_mode == INFERIOR) ? (m0 + alpha * y) : (m0 - alpha * y);
+using namespace std::chrono;
+using namespace std;
+using namespace Eigen;
+
+
+//modele de n (mirage par example qui depend que de hauter et qui est constant par rapport a x cf notes)
+
+//double something_real(double y, double T_y0){
+//return T_y0 + 0.5 * y ;}
+
+
+//mirage to simulate (mirage inferieur)
+double mirage(double y){
+double n0 =   1.000293; // air
+double alpha = 0.0001; //increment of dependance of y in terms of refractive index
+return n0 + alpha * y; //for superior mirage echqnge + with -
 }
 
-void get_grad_m(double y, double& dmdx, double& dmdy) {
-    double alpha = 0.0001;
-    dmdx = 0.0;
-    dmdy = (current_mode == INFERIOR) ? alpha : -alpha; [cite: 13]
+void grad_mirage(double y, double& dndx , double& dndy ){
+double alpha = 0.2;
+dndx = 0.0;
+dndy = -alpha;
+
 }
 
-// The derivative function f(X(s)) [cite: 25, 26]
-void mirage_deriv(int n, double s, double y_vec[], double dy_ds[]) {
-    double y = y_vec[1];
-    double ux = y_vec[2];
-    double uy = y_vec[3];
+//fonction derivative f(X(s))
 
-    double m = get_m(y);
-    double dmdx, dmdy;
-    get_grad_m(y, dmdx, dmdy);
+//je tracte my ray avec un state vector
+void mirage_deriv(int m , double s, double state_vec[4], double dy_ds[4] ){
 
-    dy_ds[0] = ux; // dx/ds 
-    dy_ds[1] = uy; // dy/ds 
 
-    double u_dot_gradm = (ux * dmdx + uy * dmdy);
-    
-    // du/ds calculation from the document 
-    dy_ds[2] = (1.0 / m) * dmdx - (ux / m) * u_dot_gradm;
-    dy_ds[3] = (1.0 / m) * dmdy - (uy / m) * u_dot_gradm;
+double x = state_vec[0];
+double y = state_vec[1];
+double ux = state_vec[2];
+double uy = state_vec[3];
+
+
+double n = mirage(y);
+double dndx;
+double dndy;
+grad_mirage(y, dndx, dndy);
+
+dy_ds[0] = ux; // dx/ds
+dy_ds[1] = uy; //dy/ds
+
+double produit_deriv = ( ux* dndx + uy * dndy); // definition sur ipad
+dy_ds[2] = (1/n) * dndx - (ux / n) * produit_deriv;
+dy_ds[3] = (1/n) * dndy - (uy / n) * produit_deriv;
 }
 
-// 3. How they appear "Closer" or "Farther"The distance at which the image appears depends on the curvature of the ray path.Inferior Mirage (The "Close" Mirage): Because the rays bend upward rapidly near the hot surface, the "virtual image" appears on the ground quite close to the observer. You see the sky reflected on the road, making the "water" look like it's just a few hundred meters away. Superior Mirage (The "Far" Mirage): These rays bend downward, following the curvature of the Earth. This allows you to see objects that are actually below the horizon (far away). The object appears to "loom" or float high in the sky. 4. Running the SimulationTo see the difference, you can initialize the state vector $X$  and run your rk4 loop twice:Set current_mode = INFERIOR: Start at $y=2$ and point the ray slightly down ($u_y = -0.05$). You will see it "bounce" off the air near $y=0$. Set current_mode = SUPERIOR: Start at $y=10$ and point the ray slightly up ($u_y = 0.05$). You will see it curve back toward the ground. Would you like me to add a "ground collision" detection to stop the simulation when the ray hits the $y=0$ surface?
 
 
-#include <fstream>
+void rk4(int n, double x, double y[] ,double dx,
+               void deriv(int , double ,double [], double [])){
+               //
+/*-----------------------------------------
+ sous programme de resolution d'equations
+ differentielles du premier ordre par
+ la methode de Runge-Kutta d'ordre 4
+ x = abscisse
+ y = valeurs des fonctions
+ dx = pas
+ n = nombre d'equations differentielles
+ deriv = variable contenant le nom du
+ sous-programme qui calcule les derivees
+ ----------------------------------------*/
+int i ;
+double ddx ;
+/* d1, d2, d3, d4 = estimations des derivees
+   yp = estimations intermediaires des fonctions */
+double d1[n], d2[n], d3[n], d4[n], yp[n];
 
-int main() {
-    const int n = 4; // x, y, ux, uy 
-    double s = 0.0;
-    double ds = 0.1; // Step size [cite: 24]
-    double state[4] = {0.0, 2.0, 1.0, -0.02}; // Start at height 2, pointing slightly down
+ddx = dx/2;                /* demi-pas */
 
+deriv(n,x,y,d1) ;          /* 1ere estimation */
+
+for( i = 0; i< n; i++){ yp[i] = y[i] + d1[i]*ddx ; }
+deriv(n,x+ddx,yp,d2) ;     /* 2eme estimat. (1/2 pas) */
+
+for( i = 0; i < n; i++){ yp[i] = y[i] + d2[i]*ddx ; }
+mirage_deriv(n,x+ddx,yp,d3) ; /* 3eme estimat. (1/2 pas) */
+
+for( i = 0; i< n; i++){ yp[i] = y[i] + d3[i]*dx ;}
+deriv(n,x+dx,yp,d4) ;      /* 4eme estimat. (1 pas) */
+/* estimation de y pour le pas suivant en utilisant
+  une moyenne pondérée des dérivées en remarquant
+  que : 1/6 + 1/3 + 1/3 + 1/6 = 1 */
+
+for( i = 0; i < n ; i++)
+ { y[i] = y[i] + dx*( d1[i] + 2*d2[i] + 2*d3[i] + d4[i] )/6 ; }
+
+}
+
+
+
+int main(){
+
+const int m = 4; // x, y , ux , uy
+double s = 0;
+double ds = 0.1 ; // taille step incriment
+double state[4] = {0.0, 1.0, 0.7071, -0.7071};
+    std::cout << "Starting simulation ..." << std::endl;
     std::ofstream outFile("mirage_data.csv");
-    outFile << "x,y\n"; // Header
+    if(!outFile) return 1;
 
-    for (int step = 0; step < 500; step++) {
+    outFile << "x,y\n";
+
+    for(int i = 0; i < 100; i++) {
+
+
         outFile << state[0] << "," << state[1] << "\n";
-        
-        // Use your RK4 to solve dx = f(x(s)) 
-        rk4(n, s, state, ds, mirage_derivatives);
+      rk4(m, s, state, ds, mirage_deriv);
+       //printf("iteration :%d",i);
+      //fflush(stdout);
+
         s += ds;
 
-        if (state[1] < 0 || state[1] > 10) break; // Stop if it hits ground or goes too high
+        if((state[1]< 0) or! (state[1]) > 10) break; //si on est par terre ou trop haut
     }
+
     outFile.close();
+    std::cout << "Simulation complete. Data saved to mirage_data.csv" << std::endl;
     return 0;
 }
