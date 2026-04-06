@@ -10,9 +10,9 @@
 
 using namespace std;
 
-double r_0 = 10 ; //micrometre
-double n_0 = 1.25;
-double n_core = 1.5 ;
+double r_0 = 50 ; //micrometre
+double n_0 = 1.454;
+double n_core = 1.484 ; //prise de RP Photonics
 
 double delta_n =  (- n_0 + n_core) / n_core;
 
