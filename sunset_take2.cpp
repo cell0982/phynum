@@ -8,7 +8,7 @@ using namespace std;
 
 const double R_earth = 6371000;
 const double N0 = 1.000321918;  // refractive index at 20 deg sea level
-double H_scale = 50000; //scale height
+double H_scale = 8400; //scale height
 
 //atmospheic index
 
